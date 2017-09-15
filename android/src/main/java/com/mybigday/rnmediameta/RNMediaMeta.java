@@ -79,11 +79,11 @@ public class RNMediaMeta extends ReactContextBaseJavaModule {
   }
 
   private void getMetadata(String path, ReadableMap options, Promise promise) {
-    File f = new File(path);
-    if (!f.exists() || f.isDirectory()) {
-      promise.reject("-15", "file not found");
-      return;
-    }
+    // File f = new File(path);
+    // if (!f.exists() || f.isDirectory()) {
+    //   promise.reject("-15", e.getMessage());
+    //   return;
+    // }
 
     FFmpegMediaMetadataRetriever mmr = new FFmpegMediaMetadataRetriever();
     WritableMap result = Arguments.createMap();
@@ -141,6 +141,7 @@ public class RNMediaMeta extends ReactContextBaseJavaModule {
 
     } catch(Exception e) {
       e.printStackTrace();
+      promise.reject("-15", e.getMessage());
     } finally {
       promise.resolve(result);
       mmr.release();
