@@ -141,7 +141,6 @@ public class RNMediaMeta extends ReactContextBaseJavaModule {
 
     } catch(Exception e) {
       e.printStackTrace();
-      promise.reject("-15", e.getMessage());
     } finally {
       promise.resolve(result);
       mmr.release();
