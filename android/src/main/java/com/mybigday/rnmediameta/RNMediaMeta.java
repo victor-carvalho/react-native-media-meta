@@ -3,13 +3,13 @@ package com.mybigday.rnmediameta;
 import android.content.Context;
 import android.graphics.Bitmap;
 import wseemann.media.FFmpegMediaMetadataRetriever;
+
+import android.os.Process;
 import android.util.Base64;
 import android.graphics.Matrix;
 
 import com.facebook.react.bridge.Arguments;
-// import com.facebook.react.bridge.NativeModule;
 import com.facebook.react.bridge.ReactApplicationContext;
-// import com.facebook.react.bridge.ReactContext;
 import com.facebook.react.bridge.ReactContextBaseJavaModule;
 import com.facebook.react.bridge.ReactMethod;
 import com.facebook.react.bridge.ReadableMap;
@@ -17,14 +17,28 @@ import com.facebook.react.bridge.Promise;
 import com.facebook.react.bridge.WritableMap;
 
 import java.io.ByteArrayOutputStream;
-import java.io.File;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 
 public class RNMediaMeta extends ReactContextBaseJavaModule {
+  public static final int NUMBER_OF_CORES = Runtime.getRuntime().availableProcessors();
+  private final ThreadPoolExecutor mExecutor;
+  
   private Context context;
 
   public RNMediaMeta(ReactApplicationContext reactContext) {
     super(reactContext);
+
+    this.mExecutor = new ThreadPoolExecutor(
+      NUMBER_OF_CORES * 2,
+      NUMBER_OF_CORES * 2,
+      60L,
+      TimeUnit.SECONDS,
+      new LinkedBlockingQueue<Runnable>(),
+      new PriorityThreadFactory(Process.THREAD_PRIORITY_BACKGROUND)
+    );
 
     this.context = (Context) reactContext;
   }
@@ -79,11 +93,6 @@ public class RNMediaMeta extends ReactContextBaseJavaModule {
   }
 
   private void getMetadata(String path, ReadableMap options, Promise promise) {
-    // File f = new File(path);
-    // if (!f.exists() || f.isDirectory()) {
-    //   promise.reject("-15", e.getMessage());
-    //   return;
-    // }
 
     FFmpegMediaMetadataRetriever mmr = new FFmpegMediaMetadataRetriever();
     WritableMap result = Arguments.createMap();
@@ -110,20 +119,25 @@ public class RNMediaMeta extends ReactContextBaseJavaModule {
       }
 
       // Legacy support & camelCase
-      result.putString("createTime", result.getString("creation_time"));
+      if (result.hasKey("creation_time")) {
+        result.putString("createTime", result.getString("creation_time"));
+      }
 
-      if (options.getBoolean("getThumb")) {
+      if (options.getBoolean("thumb")) {
         // get thumb
         Bitmap bmp = mmr.getFrameAtTime();
         if (bmp != null) {
-          // Bitmap bmp2 = mmr.getFrameAtTime((long) 4E6, FFmpegMediaMetadataRetriever.OPTION_CLOSEST);
-          // if (bmp2 != null) bmp = bmp2;
-
           /*
           * The image returned seems to be always in landscape mode and does not follow
           * the rotation of the video.
           * get the rotation from the metadata and apply the correction so the image is straight.
           */
+          if (options.hasKey("height") && options.hasKey("width")) {
+            int width = options.getInt("width");
+            int height = options.getInt("height");
+
+            bmp = Bitmap.createScaledBitmap(bmp, width, height, true);
+          }
 
           if (result.hasKey("rotation")) {
             Bitmap rotatedBmp = RotateBitmap(bmp, Float.parseFloat(result.getString("rotation")));
@@ -138,11 +152,11 @@ public class RNMediaMeta extends ReactContextBaseJavaModule {
           result.putString("thumb", convertToBase64(bytes));
         }
       }
-
+      promise.resolve(result);
     } catch(Exception e) {
       e.printStackTrace();
+      promise.reject("-15", e.getMessage());
     } finally {
-      promise.resolve(result);
       mmr.release();
     }
   }
@@ -157,12 +171,11 @@ public class RNMediaMeta extends ReactContextBaseJavaModule {
 
   @ReactMethod
   public void get(final String path, final ReadableMap options, final Promise promise) {
-
-    new Thread() {
+    this.mExecutor.execute(new Runnable() {
       @Override
       public void run() {
         getMetadata(path, options, promise);
       }
-    }.start();
+    });
   }
 }

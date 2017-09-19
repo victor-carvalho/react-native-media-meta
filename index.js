@@ -5,7 +5,7 @@ const { RNMediaMeta } = NativeModules
 export default {
   get(path, options) {
     return RNMediaMeta.get(path, {
-      getThumb: true,
+      thumb: true,
       ...options,
     })
   },
